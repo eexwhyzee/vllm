@@ -274,11 +274,12 @@ class _MockTokenizer:
 
     def convert_ids_to_tokens(
         self, ids: list[int], skip_special_tokens: bool = False
-    ) -> list[str]:
-        return [self._raw[tid] for tid in ids]
+    ) -> list[str | None]:
+        # Like HF tokenizers, ids outside the vocab map to None.
+        return [self._raw.get(tid) for tid in ids]
 
     def decode(self, ids: list[int], skip_special_tokens: bool = False) -> str:
-        return "".join(self._decoded[tid] for tid in ids)
+        return "".join(self._decoded.get(tid, "") for tid in ids)
 
 
 def test_sentencepiece_leading_space_preserved():
@@ -357,3 +358,14 @@ def test_logprobs_count_stable_across_k():
     assert len(top4) == 4
     assert len(top10) == 10
     assert top4[" true"] == top10[" true"]
+
+
+def test_out_of_vocab_id_maps_to_empty_string():
+    """Ids past the tokenizer vocab (e.g. sampled from padded lm_head rows)
+    have no raw piece; they must yield "" instead of raising."""
+    tok = _MockTokenizer(
+        raw_tokens={0: "▁true"},
+        decoded_tokens={0: "true"},
+    )
+    result = convert_ids_list_to_tokens(tok, [0, 1])
+    assert result == [" true", ""]
